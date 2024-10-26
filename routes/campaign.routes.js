@@ -3,7 +3,6 @@ import { Smtp } from "../models/smtp.model.js";
 import { Campaign } from "../models/campaign.model.js";
 import { EmailList } from "../models/emailList.model.js";
 import sendEmail from "../services/email.service.js";
-import startImap from "../services/imap.service.js";
 
 const router = Router();
 
@@ -18,12 +17,8 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    console.log(subject);
-    // Use provided SMTP or fallback to the default one
-    const smtp = smtpId
-      ? await Smtp.findById(smtpId)
-      : await Smtp.findOne({ user: process.env.DEFAULT_SMTP_USER });
-
+    // Retrieve SMTP configuration using the provided smtpId
+    const smtp = await Smtp.findById(smtpId);
     if (!smtp) return res.status(404).json({ error: "No valid SMTP found" });
 
     // Fetch emails from the EmailList collection using the emailListId
@@ -33,11 +28,17 @@ router.post("/", async (req, res) => {
         .status(404)
         .json({ error: "No emails found in the selected list" });
     }
-    // error handle for duplicate subject:
-    const isSameSubjects = await Campaign.findOne({ subject });
-    if (isSameSubjects) {
-      throw new Error("This Campaign already exist, please change the subject");
+
+    // Check for duplicate subject
+    const isSameSubject = await Campaign.findOne({ subject });
+    if (isSameSubject) {
+      return res
+        .status(400)
+        .json({
+          error: "This campaign already exists, please change the subject",
+        });
     }
+
     // Save the campaign in the database
     const campaign = new Campaign({
       name,
@@ -49,9 +50,6 @@ router.post("/", async (req, res) => {
       replies: [],
     });
     await campaign.save();
-
-    // Start IMAP monitoring for the selected SMTP
-    startImap(smtp._id);
 
     // Send emails using the fetched email list
     await sendEmail(campaign, emailList.emails);
@@ -86,16 +84,16 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
     const result = await Campaign.findByIdAndDelete(req.params.id);
     res.status(200).json({
       success: true,
-      message: "Delete Campaign successfully",
-      data: result
-    })
+      message: "Deleted Campaign successfully",
+      data: result,
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete Campaign configurations' });
+    res.status(500).json({ error: "Failed to delete Campaign configuration" });
   }
 });
 
