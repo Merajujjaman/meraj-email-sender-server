@@ -27,14 +27,14 @@ app.get("/", (req, res) => {
   res.send("Hello from Vercel!");
 });
 
-app.get('/api/check-emails', async (req, res) => {
-  try {
-      await startImap(); // Call your existing startImap function
-      res.status(200).send("IMAP check initiated.");
-  } catch (error) {
-      res.status(500).send("Error checking emails.");
-  }
-});
+// app.get('/api/check-emails', async (req, res) => {
+//   try {
+//       await startImap(); // Call your existing startImap function
+//       res.status(200).send("IMAP check initiated.");
+//   } catch (error) {
+//       res.status(500).send("Error checking emails.");
+//   }
+// });
 
 
 // Route to listen for incoming SSE connections
