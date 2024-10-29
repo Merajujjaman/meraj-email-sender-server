@@ -1,5 +1,4 @@
 
-
 import cron from 'node-cron';
 import startImap from './imap.service.js';
 

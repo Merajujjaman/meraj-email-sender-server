@@ -12,6 +12,10 @@ const smtpSchema = new Schema(
       type: String,
       required: true, 
     },
+    isOpen: {
+      type: Boolean,
+      default: false
+    },
     host: {
       type: String,
       default: "smtp.gmail.com", // Gmail SMTP host

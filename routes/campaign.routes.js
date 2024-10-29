@@ -3,40 +3,38 @@ import { Smtp } from "../models/smtp.model.js";
 import { Campaign } from "../models/campaign.model.js";
 import { EmailList } from "../models/emailList.model.js";
 import sendEmail from "../services/email.service.js";
+import mongoose from "mongoose";
 
 const router = Router();
 
-// Create and start a campaign
 router.post("/", async (req, res) => {
+  const session = await mongoose.startSession(); // Start a session
+  session.startTransaction(); // Start a transaction
   try {
-    const { name, subject, senderName, smtpId, emailListId, message } =
-      req.body;
+    const { name, subject, senderName, smtpId, emailListId, message } = req.body;
 
     // Validate required fields
     if (!name || !subject || !senderName || !emailListId) {
+      await session.abortTransaction(); // Abort transaction if validation fails
       return res.status(400).json({ error: "Missing required fields" });
     }
 
     // Retrieve SMTP configuration using the provided smtpId
-    const smtp = await Smtp.findById(smtpId);
-    if (!smtp) return res.status(404).json({ error: "No valid SMTP found" });
+    const smtp = await Smtp.findById(smtpId)
+    if (!smtp) {
+      return res.status(404).json({ error: "No valid SMTP found" });
+    }
 
     // Fetch emails from the EmailList collection using the emailListId
-    const emailList = await EmailList.findById(emailListId);
+    const emailList = await EmailList.findById(emailListId) 
     if (!emailList || !emailList.emails.length) {
-      return res
-        .status(404)
-        .json({ error: "No emails found in the selected list" });
+      return res.status(404).json({ error: "No emails found in the selected list" });
     }
 
     // Check for duplicate subject
-    const isSameSubject = await Campaign.findOne({ subject });
+    const isSameSubject = await Campaign.findOne({ subject })
     if (isSameSubject) {
-      return res
-        .status(400)
-        .json({
-          error: "This campaign already exists, please change the subject",
-        });
+      return res.status(400).json({ error: "This campaign already exists, please change the subject" });
     }
 
     // Save the campaign in the database
@@ -49,15 +47,23 @@ router.post("/", async (req, res) => {
       message: message || `Hello! This is a campaign: ${name}`,
       replies: [],
     });
-    await campaign.save();
+    
+    await campaign.save({session}); 
+
+    // Update SMTP configurations
+    await Smtp.updateMany({ isOpen: true }, { isOpen: false }, { session }); 
+    await Smtp.findByIdAndUpdate(smtpId, { isOpen: true }, { session });
 
     // Send emails using the fetched email list
     await sendEmail(campaign, emailList.emails);
 
-    res
-      .status(201)
-      .json({ message: "Campaign started and emails sent successfully" });
+    await session.commitTransaction();
+    await session.endSession()
+    res.status(201).json({ message: "Campaign started and emails sent successfully" });
+
   } catch (error) {
+    await session.abortTransaction()
+    await session.endSession()
     console.error("Error starting campaign:", error);
     res.status(500).json({
       success: false,
@@ -65,11 +71,15 @@ router.post("/", async (req, res) => {
       error,
     });
   }
+
+  // End the session outside the try-catch block
+  session.endSession(); // End the session
 });
+
 
 router.get("/", async (req, res) => {
   try {
-    const result = await Campaign.find();
+    const result = await Campaign.find().populate('smtpId').populate('emailListId');
     res.status(200).json({
       success: true,
       message: "Campaign Data fetch successfully",

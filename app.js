@@ -4,73 +4,57 @@ import cors from "cors";
 import { smtpRoutes } from "./routes/smtp.routes.js";
 import { campaignRoutes } from "./routes/campaign.routes.js";
 import { emailListRoutes } from "./routes/emailList.routes.js";
-import "./services/cron.service.js";
 import startImap from "./services/imap.service.js";
 
 dotenv.config();
 const app = express();
 app.use(express.json());
-// app.use(cors());
 
+// CORS setup
 app.use(
   cors({
-    origin: "*", // Allow all origins
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"], // Allow these methods
-    allowedHeaders: ["Content-Type", "Authorization"], // Allow these headers
-    credentials: true, // Allow credentials
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
 
-export const clients = []; // Export the clients array
+export const clients = []; // Track connected clients
 
+// Root endpoint
 app.get("/", (req, res) => {
   res.send("Hello from Vercel!");
 });
 
-// app.get('/api/check-emails', async (req, res) => {
-//   try {
-//       await startImap(); // Call your existing startImap function
-//       res.status(200).send("IMAP check initiated.");
-//   } catch (error) {
-//       res.status(500).send("Error checking emails.");
-//   }
-// });
-
-
-// Route to listen for incoming SSE connections
+// SSE endpoint for notifications
 app.get("/events", (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
-  // Add this connection to the clients array
+  // Add client connection to clients array
   clients.push(res);
 
-  // Remove the client when the connection closes
+  // Remove client when connection closes
   req.on("close", () => {
     clients.splice(clients.indexOf(res), 1);
   });
 });
 
+// Function to notify all connected clients
+export const notifyClients = (data) => {
+  clients.forEach((client) => {
+    client.write(`data: ${JSON.stringify(data)}\n\n`);
+  });
+};
 
-//Routes
+// Routes
 app.use("/api/smtp", smtpRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/email-lists", emailListRoutes);
 
-// MongoDB Connection
-// const connectDB = async () => {
-//   try {
-//     await mongoose.connect(process.env.MONGO_URI);
-//     console.log("MongoDB connected");
-//   } catch (error) {
-//     console.error("MongoDB connection error:", error);
-//   }
-// };
-
-// connectDB();
-
-// const PORT = process.env.PORT || 5000;
-// app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+// Start IMAP service
+startImap(); // Start IMAP service when the app starts
 
 export default app;
